@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🗑️ 香港回收點 | Hong Kong Recycling Points</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+  /* ── Header ── */
+  #header {
+    background: #2e7d32;
+    color: white;
+    padding: 10px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px;
+  }
+  #header h1 { font-size: 16px; font-weight: 700; }
+  #header .subtitle { font-size: 11px; opacity: 0.85; }
+
+  /* ── Filter Bar ── */
+  #filter-bar {
+    background: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+    padding: 6px 10px;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  }
+  #filter-bar label { font-size: 12px; color: #555; font-weight: 600; }
+  #filter-bar select { padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 12px; min-width: 130px; }
+
+  /* ── Waste Type Filter (horizontal scroll pills) ── */
+  #waste-filter {
+    display: flex; gap: 5px; overflow-x: auto; flex: 1;
+    padding: 4px 0; scrollbar-width: thin;
+  }
+  .waste-pill {
+    padding: 4px 10px; border: 1.5px solid #bbb; border-radius: 20px;
+    background: white; color: #555; font-size: 11px; font-weight: 600;
+    cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .waste-pill:hover { border-color: #2e7d32; color: #2e7d32; }
+  .waste-pill.active { background: #2e7d32; color: white; border-color: #2e7d32; }
+  .waste-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── Map ── */
+  #map { height: calc(100vh - 115px); width: 100%; }
+
+  /* ── Legend ── */
+  #legend {
+    position: absolute; bottom: 30px; right: 10px; z-index: 1000;
+    background: white; border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    padding: 10px 12px; min-width: 170px;
+    font-size: 11px;
+  }
+  #legend h4 { font-size: 12px; font-weight: 700; color: #1b5e20; margin-bottom: 8px; }
+  .legend-row { display: flex; align-items: center; gap: 7px; margin: 4px 0; color: #444; }
+  .legend-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.2); flex-shrink: 0; }
+  .legend-marker { width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.2); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: white; }
+
+  /* ── Custom Marker ── */
+  .rvm-marker {
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: white;
+  }
+  .rvm-marker:hover { transform: scale(1.25); box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
+
+  /* ── Popup ── */
+  .popup-name { font-size: 14px; font-weight: 700; color: #1b5e20; margin-bottom: 6px; }
+  .popup-section { margin: 6px 0; }
+  .popup-section-title { font-size: 11px; color: #888; font-weight: 600; margin-bottom: 3px; }
+  .popup-wastes { display: flex; flex-wrap: wrap; gap: 4px; }
+  .popup-waste-tag {
+    padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600;
+    color: white; display: inline-block;
+  }
+  .popup-address { font-size: 12px; color: #555; line-height: 1.4; }
+  .popup-hours { font-size: 11px; color: #666; background: #f9f9f9; padding: 4px 8px; border-radius: 6px; }
+  .popup-contact { font-size: 11px; color: #666; }
+  .popup-district { font-size: 10px; color: #888; }
+  .popup-legend-tag { font-size: 10px; padding: 2px 6px; border-radius: 8px; background: #e8f5e9; color: #2e7d32; font-weight: 600; display: inline-block; margin-bottom: 4px; }
+
+  /* ── Stats ── */
+  #stats-bar {
+    background: #f5f5f5; border-bottom: 1px solid #ddd; padding: 5px 14px;
+    font-size: 11px; color: #666; display: flex; align-items: center; gap: 8px;
+  }
+  #stats-count { font-weight: 700; color: #2e7d32; }
+
+  /* ── Mobile ── */
+  @media (max-width: 600px) {
+    #header h1 { font-size: 14px; }
+    #filter-bar { padding: 6px 8px; }
+    #legend { bottom: 20px; right: 5px; font-size: 10px; min-width: 150px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <h1>🗑️ 香港回收點</h1>
+    <div class="subtitle">Hong Kong Recycling Points Map — 8,858 locations</div>
+  </div>
+</div>
+
+<div id="filter-bar">
+  <label>地區：</label>
+  <select id="district-filter">
+    <option value="all">全部地區</option>
+  </select>
+
+  <div id="waste-filter"></div>
+</div>
+
+<div id="stats-bar">
+  顯示 <span id="stats-count">—</span> 個回收點
+</div>
+
+<div id="map">
+  <div id="legend">
+    <h4>圖例 | Legend</h4>
+    <div class="legend-row"><div class="legend-dot" style="background:#1565c0;"></div><span>公眾回收桶</span></div>
+    <div class="legend-row"><div class="legend-dot" style="background:#f57f17;"></div><span>私人回收點</span></div>
+    <div class="legend-row"><div class="legend-dot" style="background:#43a047;"></div><span>智能回收車 Smart Bin</span></div>
+    <div class="legend-row"><div class="legend-dot" style="background:#7b1fa2;"></div><span>回收環保站</span></div>
+    <div class="legend-row"><div class="legend-dot" style="background:#00838f;"></div><span>社區回收點</span></div>
+    <div class="legend-row"><div class="legend-dot" style="background:#c62828;"></div><span>其他</span></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Waste type config ──────────────────────────────────────────────────────────
+const WASTE_TYPES = [
+  { id: 'Paper',                        label: '紙張',       color: '#1976d2' },
+  { id: 'Metals',                       label: '金屬',       color: '#455a64' },
+  { id: 'Plastics',                     label: '塑膠',       color: '#f57c00' },
+  { id: 'Glass Bottles',                label: '玻璃樽',     color: '#00897b' },
+  { id: 'Rechargeable Batteries',        label: '充電池',     color: '#c62828' },
+  { id: 'Fluorescent Lamp',             label: '慳電膽/光管', color: '#6a1b9a' },
+  { id: 'Food Waste',                   label: '廚餘',       color: '#4e342e' },
+  { id: 'Small Electrical and Electronic Equipment', label: '小型電器', color: '#00695c' },
+  { id: 'Beverage Cartons',             label: '紙包飲品盒',  color: '#ad1457' },
+  { id: 'Plastic Bottle',               label: '膠樽',       color: '#0288d1' },
+  { id: 'Clothes',                     label: '舊衣',       color: '#8d6e63' },
+  { id: 'Regulated Electrical Equipment',label: '四電一腦',    color: '#283593' },
+  { id: 'Barbeque Fork',                label: '燒烤叉',     color: '#ef6c00' },
+  { id: 'Printer Cartridges',            label: '打印機碳粉',  color: '#37474f' },
+  { id: 'Computers',                    label: '電腦',       color: '#1565c0' },
+];
+
+const WASTE_MAP = {};
+WASTE_TYPES.forEach(w => WASTE_MAP[w.id] = w);
+
+// ── Legend color map ───────────────────────────────────────────────────────────
+const LEGEND_COLORS = {
+  'Recycling Bins at Public Place':        '#1565c0',
+  'Private Collection Points (e.g. housing estates, shopping centres)': '#f57f17',
+  'Smart Bin':                             '#43a047',
+  'Recycling Spots':                       '#00838f',
+  'Street Corner Recycling Shops':          '#c62828',
+  'Recycling Stations/Recycling Stores':    '#7b1fa2',
+  'NGO Collection Points':                 '#ad1457',
+  'None':                                  '#9e9e9e',
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const STATE = {
+  district: 'all',
+  wasteFilter: new Set(WASTE_TYPES.map(w => w.id)), // all on by default
+  markers: {},
+};
+
+// ── Leaflet map ───────────────────────────────────────────────────────────────
+const map = L.map('map').setView([22.3193, 114.1694], 11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap'
+}).addTo(map);
+
+// ── Waste type pill filter ───────────────────────────────────────────────────
+function buildWasteFilter() {
+  const container = document.getElementById('waste-filter');
+  container.innerHTML = '';
+  WASTE_TYPES.forEach(w => {
+    const btn = document.createElement('button');
+    btn.className = 'waste-pill active';
+    btn.dataset.waste = w.id;
+    btn.innerHTML = `<span class="waste-dot" style="background:${w.color}"></span>${w.label}`;
+    btn.addEventListener('click', () => {
+      if (STATE.wasteFilter.has(w.id)) {
+        STATE.wasteFilter.delete(w.id);
+        btn.classList.remove('active');
+      } else {
+        STATE.wasteFilter.add(w.id);
+        btn.classList.add('active');
+      }
+      applyFilters();
+    });
+    container.appendChild(btn);
+  });
+}
+
+// ── District filter ───────────────────────────────────────────────────────────
+function buildDistrictFilter(features) {
+  const districts = [...new Set(features.map(f => f.properties.district))].sort();
+  const select = document.getElementById('district-filter');
+  districts.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    // Human-readable district name
+    const name = d.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    opt.textContent = name;
+    select.appendChild(opt);
+  });
+  select.addEventListener('change', () => {
+    STATE.district = select.value;
+    applyFilters();
+  });
+}
+
+// ── Marker icon ───────────────────────────────────────────────────────────────
+function createMarkerIcon(legend) {
+  const color = LEGEND_COLORS[legend] || '#9e9e9e';
+  const sz = 22;
+  return L.divIcon({
+    className: 'rvm-marker-wrapper',
+    html: `<div class="rvm-marker" style="width:${sz}px;height:${sz}px;background:${color};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.25)"></div>`,
+    iconSize: [sz, sz],
+    iconAnchor: [sz/2, sz/2],
+    popupAnchor: [0, -sz/2],
+  });
+}
+
+// ── Build popup content ───────────────────────────────────────────────────────
+function buildPopupContent(props) {
+  const wastes = props.waste_types || [];
+  const wasteTags = wastes.map(w => {
+    const cfg = WASTE_MAP[w.trim()];
+    const color = cfg ? cfg.color : '#9e9e9e';
+    const label = cfg ? cfg.label : w.trim();
+    return `<span class="popup-waste-tag" style="background:${color}">${label}</span>`;
+  }).join('');
+
+  const hoursHtml = props.openhour_tc
+    ? `<div class="popup-hours">🕐 ${props.openhour_tc}</div>` : '';
+  const contactHtml = props.contact_tc
+    ? `<div class="popup-contact">📞 ${props.contact_tc}</div>` : '';
+
+  const legendLabel = props.legend || '其他';
+  const legendColor = LEGEND_COLORS[props.legend] || '#9e9e9e';
+
+  return `
+    <div class="popup-name">${props.name_tc}</div>
+    <div class="popup-section">
+      <div class="popup-section-title">類型</div>
+      <span class="popup-legend-tag" style="background:${legendColor}20;color:${legendColor};border:1px solid ${legendColor}">${legendLabel}</span>
+    </div>
+    <div class="popup-section">
+      <div class="popup-section-title">地址</div>
+      <div class="popup-address">${props.address_tc}</div>
+    </div>
+    <div class="popup-section">
+      <div class="popup-section-title">接收廢物 (${wastes.length}種)</div>
+      <div class="popup-wastes">${wasteTags || '<span style="color:#999">—</span>'}</div>
+    </div>
+    ${hoursHtml}
+    ${contactHtml}
+    <div class="popup-district">📍 ${props.district.replace(/_/g, ' ')}</div>
+  `;
+}
+
+// ── Apply filters ─────────────────────────────────────────────────────────────
+function applyFilters() {
+  let visibleCount = 0;
+
+  for (const [cpId, marker] of Object.entries(window.rcMarkers)) {
+    const f = window.rcData.features.find(ff => ff.properties.cp_id == cpId);
+    if (!f) continue;
+    const props = f.properties;
+
+    // District filter
+    if (STATE.district !== 'all' && props.district !== STATE.district) {
+      marker.setOpacity(0);
+      continue;
+    }
+
+    // Waste type filter: show only if ANY selected waste type is accepted
+    const accepted = props.waste_types || [];
+    const hasWantedWaste = accepted.some(w => STATE.wasteFilter.has(w.trim()));
+    if (STATE.wasteFilter.size > 0 && !hasWantedWaste) {
+      marker.setOpacity(0);
+      continue;
+    }
+
+    marker.setOpacity(1);
+    visibleCount++;
+  }
+
+  document.getElementById('stats-count').textContent = visibleCount.toLocaleString();
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
+  const resp = await fetch('recycling_data.json');
+  const geojson = await resp.json();
+  window.rcData = geojson;
+
+  // Store markers keyed by cp_id
+  window.rcMarkers = {};
+
+  geojson.features.forEach(f => {
+    const props = f.properties;
+    const [lng, lat] = f.geometry.coordinates;
+    const marker = L.marker([lat, lng], {
+      icon: createMarkerIcon(props.legend)
+    });
+    marker.bindPopup('載入中…');
+    marker.on('click', () => {
+      marker.getPopup().setContent(buildPopupContent(props)).openPopup();
+    });
+    marker.addTo(map);
+    window.rcMarkers[props.cp_id] = marker;
+  });
+
+  buildWasteFilter();
+  buildDistrictFilter(geojson.features);
+  applyFilters();
+
+  document.getElementById('stats-count').textContent =
+    Object.keys(window.rcMarkers).length.toLocaleString();
+}
+
+init();
+</script>
+</body>
+</html>

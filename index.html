@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🗑️ 香港回收點 | Hong Kong Recycling Points</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -20,6 +22,40 @@
   }
   #header h1 { font-size: 16px; font-weight: 700; }
   #header .subtitle { font-size: 11px; opacity: 0.85; }
+
+  /* ── Search Bar ── */
+  #search-bar {
+    background: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+    padding: 7px 10px;
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  #search-input {
+    flex: 1; min-width: 180px;
+    padding: 6px 10px; border: 1.5px solid #ccc; border-radius: 20px;
+    font-size: 13px; outline: none;
+    transition: border-color 0.2s;
+  }
+  #search-input:focus { border-color: #2e7d32; }
+  #search-input::placeholder { color: #aaa; }
+
+  #gps-btn {
+    padding: 6px 12px; background: #1565c0; color: white;
+    border: none; border-radius: 20px; font-size: 12px; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+    transition: background 0.2s;
+  }
+  #gps-btn:hover { background: #0d47a1; }
+  #gps-btn.active { background: #2e7d32; }
+
+  #sort-nearest-btn {
+    padding: 6px 12px; background: #f57f17; color: white;
+    border: none; border-radius: 20px; font-size: 12px; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+    transition: background 0.2s;
+  }
+  #sort-nearest-btn:hover { background: #e65100; }
+  #sort-nearest-btn.active { background: #e65100; }
 
   /* ── Filter Bar ── */
   #filter-bar {
@@ -46,20 +82,59 @@
   .waste-pill:hover { border-color: #2e7d32; color: #2e7d32; }
   .waste-pill.active { background: #2e7d32; color: white; border-color: #2e7d32; }
   .waste-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .waste-count {
+    background: rgba(255,255,255,0.35); border-radius: 8px;
+    padding: 0 5px; font-size: 10px; min-width: 18px; text-align: center;
+  }
+  .waste-pill:not(.active) .waste-count { background: #e0e0e0; color: #666; }
 
   /* ── Map ── */
-  #map { height: calc(100vh - 115px); width: 100%; }
+  #map { height: calc(100vh - 120px); width: 100%; }
 
-  /* ── Legend ── */
+  /* ── Cluster styles ── */
+  .marker-cluster-small { background: rgba(46, 125, 50, 0.5); }
+  .marker-cluster-small div { background: #2e7d32; color: white; font-weight: 700; font-size: 12px; }
+  .marker-cluster-medium { background: rgba(25, 118, 210, 0.5); }
+  .marker-cluster-medium div { background: #1565c0; color: white; font-weight: 700; font-size: 12px; }
+  .marker-cluster-large { background: rgba(123, 31, 162, 0.5); }
+  .marker-cluster-large div { background: #7b1fa2; color: white; font-weight: 700; font-size: 12px; }
+  .marker-cluster {
+    background: rgba(46,125,50,0.4);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .marker-cluster div {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #2e7d32; color: white; font-weight: 700; font-size: 13px;
+  }
+  .marker-cluster span {
+    display: flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: #2e7d32; color: white; font-weight: 700; font-size: 13px;
+  }
+
+  /* ── Legend (clickable) ── */
   #legend {
     position: absolute; bottom: 30px; right: 10px; z-index: 1000;
     background: white; border-radius: 10px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.18);
     padding: 10px 12px; min-width: 170px;
     font-size: 11px;
+    transition: all 0.2s;
   }
-  #legend h4 { font-size: 12px; font-weight: 700; color: #1b5e20; margin-bottom: 8px; }
-  .legend-row { display: flex; align-items: center; gap: 7px; margin: 4px 0; color: #444; }
+  #legend h4 { font-size: 12px; font-weight: 700; color: #1b5e20; margin-bottom: 8px; cursor: pointer; user-select: none; }
+  #legend h4::after { content: ' ▼'; font-size: 9px; opacity: 0.6; }
+  #legend.collapsed h4::after { content: ' ▶'; }
+  #legend.collapsed .legend-rows { display: none; }
+  .legend-rows { transition: all 0.2s; }
+  .legend-row {
+    display: flex; align-items: center; gap: 7px; margin: 4px 0;
+    color: #444; cursor: pointer; padding: 3px 4px; border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .legend-row:hover { background: #f0f0f0; }
+  .legend-row.inactive { opacity: 0.35; }
   .legend-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.2); flex-shrink: 0; }
   .legend-marker { width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.2); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: white; }
 
@@ -72,6 +147,7 @@
     font-size: 10px; font-weight: 700; color: white;
   }
   .rvm-marker:hover { transform: scale(1.25); box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
+  .rvm-marker.dimmed { opacity: 0.15 !important; }
 
   /* ── Popup ── */
   .popup-name { font-size: 14px; font-weight: 700; color: #1b5e20; margin-bottom: 6px; }
@@ -90,16 +166,30 @@
 
   /* ── Stats ── */
   #stats-bar {
-    background: #f5f5f5; border-bottom: 1px solid #ddd; padding: 5px 14px;
-    font-size: 11px; color: #666; display: flex; align-items: center; gap: 8px;
+    background: #2e7d32; color: white; padding: 5px 14px;
+    font-size: 12px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   }
-  #stats-count { font-weight: 700; color: #2e7d32; }
+  #stats-count { font-weight: 700; }
+  .stats-sep { opacity: 0.5; }
+  .stats-badge {
+    background: rgba(255,255,255,0.2); border-radius: 10px;
+    padding: 2px 8px; font-size: 11px;
+  }
+  .stats-badge span { font-weight: 700; }
+
+  /* ── GPS status ── */
+  #gps-status {
+    font-size: 11px; color: #aaa; margin-left: 6px;
+    display: none;
+  }
+  #gps-status.show { display: inline; }
 
   /* ── Mobile ── */
   @media (max-width: 600px) {
     #header h1 { font-size: 14px; }
     #filter-bar { padding: 6px 8px; }
     #legend { bottom: 20px; right: 5px; font-size: 10px; min-width: 150px; }
+    #map { height: calc(100vh - 140px); }
   }
 </style>
 </head>
@@ -110,6 +200,13 @@
     <h1>🗑️ 香港回收點</h1>
     <div class="subtitle">Hong Kong Recycling Points Map — 8,858 locations</div>
   </div>
+</div>
+
+<div id="search-bar">
+  <input id="search-input" type="text" placeholder="🔍 搜尋地點或地址…" />
+  <button id="gps-btn">📍 定位</button>
+  <span id="gps-status">定位中…</span>
+  <button id="sort-nearest-btn">🚶 離我最近</button>
 </div>
 
 <div id="filter-bar">
@@ -123,21 +220,21 @@
 
 <div id="stats-bar">
   顯示 <span id="stats-count">—</span> 個回收點
+  <span class="stats-sep">|</span>
+  <span class="stats-badge">🏷️ <span id="stats-wastes">—</span> 種廢物</span>
+  <span class="stats-sep">|</span>
+  <span class="stats-badge">📍 <span id="stats-venues">—</span> 類場地</span>
 </div>
 
 <div id="map">
   <div id="legend">
-    <h4>圖例 | Legend</h4>
-    <div class="legend-row"><div class="legend-dot" style="background:#1565c0;"></div><span>公眾回收桶</span></div>
-    <div class="legend-row"><div class="legend-dot" style="background:#f57f17;"></div><span>私人回收點</span></div>
-    <div class="legend-row"><div class="legend-dot" style="background:#43a047;"></div><span>智能回收車 Smart Bin</span></div>
-    <div class="legend-row"><div class="legend-dot" style="background:#7b1fa2;"></div><span>回收環保站</span></div>
-    <div class="legend-row"><div class="legend-dot" style="background:#00838f;"></div><span>社區回收點</span></div>
-    <div class="legend-row"><div class="legend-dot" style="background:#c62828;"></div><span>其他</span></div>
+    <h4 onclick="toggleLegend()">圖例 | Legend</h4>
+    <div class="legend-rows" id="legend-rows"></div>
   </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 <script>
 // ── Waste type config ──────────────────────────────────────────────────────────
 const WASTE_TYPES = [
@@ -161,7 +258,7 @@ const WASTE_TYPES = [
 const WASTE_MAP = {};
 WASTE_TYPES.forEach(w => WASTE_MAP[w.id] = w);
 
-// ── Legend color map ───────────────────────────────────────────────────────────
+// ── Legend color map ─────────────────────────────────────────────────────────
 const LEGEND_COLORS = {
   'Recycling Bins at Public Place':        '#1565c0',
   'Private Collection Points (e.g. housing estates, shopping centres)': '#f57f17',
@@ -172,12 +269,26 @@ const LEGEND_COLORS = {
   'NGO Collection Points':                 '#ad1457',
   'None':                                  '#9e9e9e',
 };
+const LEGEND_LABELS = {
+  'Recycling Bins at Public Place':        '公眾回收桶',
+  'Private Collection Points (e.g. housing estates, shopping centres)': '私人回收點',
+  'Smart Bin':                             '智能回收車',
+  'Recycling Spots':                       '社區回收點',
+  'Street Corner Recycling Shops':          '街角回收店',
+  'Recycling Stations/Recycling Stores':    '回收環保站',
+  'NGO Collection Points':                 'NGO回收點',
+  'None':                                  '其他',
+};
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const STATE = {
   district: 'all',
-  wasteFilter: new Set(WASTE_TYPES.map(w => w.id)), // all on by default
-  markers: {},
+  wasteFilter: new Set(WASTE_TYPES.map(w => w.id)),
+  legendFilter: new Set(Object.keys(LEGEND_COLORS)), // all on by default
+  searchQuery: '',
+  userLat: null,
+  userLng: null,
+  sortNearest: false,
 };
 
 // ── Leaflet map ───────────────────────────────────────────────────────────────
@@ -186,7 +297,28 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// ── Waste type pill filter ───────────────────────────────────────────────────
+// ── Marker cluster group ──────────────────────────────────────────────────────
+const markerCluster = L.markerClusterGroup({
+  chunkedLoading: true,
+  maxClusterRadius: 60,
+  spiderfyOnMaxZoom: true,
+  showCoverageOnHover: false,
+  zoomToBoundsOnClick: true,
+  iconCreateFunction: function(cluster) {
+    const count = cluster.getChildCount();
+    let size = 'small', color = '#2e7d32';
+    if (count >= 100) { size = 'large'; color = '#7b1fa2'; }
+    else if (count >= 20) { size = 'medium'; color = '#1565c0'; }
+    return L.divIcon({
+      html: `<div><span>${count >= 1000 ? Math.round(count/1000) + 'k' : count}</span></div>`,
+      className: 'marker-cluster marker-cluster-' + size,
+      iconSize: L.point(40, 40)
+    });
+  }
+});
+map.addLayer(markerCluster);
+
+// ── Waste type pill filter (with count badges) ────────────────────────────────
 function buildWasteFilter() {
   const container = document.getElementById('waste-filter');
   container.innerHTML = '';
@@ -194,7 +326,7 @@ function buildWasteFilter() {
     const btn = document.createElement('button');
     btn.className = 'waste-pill active';
     btn.dataset.waste = w.id;
-    btn.innerHTML = `<span class="waste-dot" style="background:${w.color}"></span>${w.label}`;
+    btn.innerHTML = `<span class="waste-dot" style="background:${w.color}"></span>${w.label}<span class="waste-count" id="wc-${w.id}">0</span>`;
     btn.addEventListener('click', () => {
       if (STATE.wasteFilter.has(w.id)) {
         STATE.wasteFilter.delete(w.id);
@@ -209,6 +341,34 @@ function buildWasteFilter() {
   });
 }
 
+// ── Legend (clickable) ────────────────────────────────────────────────────────
+function buildLegend() {
+  const container = document.getElementById('legend-rows');
+  container.innerHTML = '';
+  Object.entries(LEGEND_COLORS).forEach(([key, color]) => {
+    const label = LEGEND_LABELS[key] || key;
+    const row = document.createElement('div');
+    row.className = 'legend-row';
+    row.dataset.legend = key;
+    row.innerHTML = `<div class="legend-dot" style="background:${color}"></div><span>${label}</span>`;
+    row.addEventListener('click', () => {
+      if (STATE.legendFilter.has(key)) {
+        STATE.legendFilter.delete(key);
+        row.classList.add('inactive');
+      } else {
+        STATE.legendFilter.add(key);
+        row.classList.remove('inactive');
+      }
+      applyFilters();
+    });
+    container.appendChild(row);
+  });
+}
+
+function toggleLegend() {
+  document.getElementById('legend').classList.toggle('collapsed');
+}
+
 // ── District filter ───────────────────────────────────────────────────────────
 function buildDistrictFilter(features) {
   const districts = [...new Set(features.map(f => f.properties.district))].sort();
@@ -216,9 +376,7 @@ function buildDistrictFilter(features) {
   districts.forEach(d => {
     const opt = document.createElement('option');
     opt.value = d;
-    // Human-readable district name
-    const name = d.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    opt.textContent = name;
+    opt.textContent = d.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     select.appendChild(opt);
   });
   select.addEventListener('change', () => {
@@ -251,22 +409,31 @@ function buildPopupContent(props) {
   }).join('');
 
   const hoursHtml = props.openhour_tc
-    ? `<div class="popup-hours">🕐 ${props.openhour_tc}</div>` : '';
+    ? `<div class="popup-hours">🕐 ${props.openhour_tc}</div>`
+    : `<div class="popup-hours">🕐 暫無資料</div>`;
   const contactHtml = props.contact_tc
-    ? `<div class="popup-contact">📞 ${props.contact_tc}</div>` : '';
+    ? `<div class="popup-contact">📞 ${props.contact_tc}</div>`
+    : `<div class="popup-contact">📞 暫無資料</div>`;
 
-  const legendLabel = props.legend || '其他';
+  const legendLabel = LEGEND_LABELS[props.legend] || props.legend || '其他';
   const legendColor = LEGEND_COLORS[props.legend] || '#9e9e9e';
+
+  // Distance if user location available
+  let distHtml = '';
+  if (STATE.userLat !== null && props._dist !== undefined) {
+    const d = props._dist;
+    if (d < 1) distHtml = `<div style="font-size:11px;color:#1565c0;font-weight:700;margin-top:4px">📍 距離 ${Math.round(d*1000)}m</div>`;
+    else distHtml = `<div style="font-size:11px;color:#1565c0;font-weight:700;margin-top:4px">📍 距離 ${d.toFixed(1)}km</div>`;
+  }
 
   return `
     <div class="popup-name">${props.name_tc}</div>
     <div class="popup-section">
-      <div class="popup-section-title">類型</div>
       <span class="popup-legend-tag" style="background:${legendColor}20;color:${legendColor};border:1px solid ${legendColor}">${legendLabel}</span>
     </div>
     <div class="popup-section">
       <div class="popup-section-title">地址</div>
-      <div class="popup-address">${props.address_tc}</div>
+      <div class="popup-address">${props.address_tc || '暫無資料'}</div>
     </div>
     <div class="popup-section">
       <div class="popup-section-title">接收廢物 (${wastes.length}種)</div>
@@ -274,64 +441,162 @@ function buildPopupContent(props) {
     </div>
     ${hoursHtml}
     ${contactHtml}
-    <div class="popup-district">📍 ${props.district.replace(/_/g, ' ')}</div>
+    ${distHtml}
+    <div class="popup-district">📍 ${(props.district || '').replace(/_/g, ' ')}</div>
   `;
+}
+
+// ── Haversine distance (km) ───────────────────────────────────────────────────
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
 // ── Apply filters ─────────────────────────────────────────────────────────────
 function applyFilters() {
   let visibleCount = 0;
+  let wasteCounts = {};
+  let venueTypes = new Set();
 
-  for (const [cpId, marker] of Object.entries(window.rcMarkers)) {
-    const f = window.rcData.features.find(ff => ff.properties.cp_id == cpId);
-    if (!f) continue;
-    const props = f.properties;
+  WASTE_TYPES.forEach(w => wasteCounts[w.id] = 0);
 
-    // District filter
-    if (STATE.district !== 'all' && props.district !== STATE.district) {
-      marker.setOpacity(0);
-      continue;
-    }
-
-    // Waste type filter: show only if ANY selected waste type is accepted
-    const accepted = props.waste_types || [];
-    const hasWantedWaste = accepted.some(w => STATE.wasteFilter.has(w.trim()));
-    if (STATE.wasteFilter.size > 0 && !hasWantedWaste) {
-      marker.setOpacity(0);
-      continue;
-    }
-
-    marker.setOpacity(1);
-    visibleCount++;
+  // Precompute distances if user location set
+  if (STATE.userLat !== null) {
+    window.rcGeoData.forEach(f => {
+      const [lng, lat] = f.geometry.coordinates;
+      f.properties._dist = haversine(STATE.userLat, STATE.userLng, lat, lng);
+    });
   }
 
+  // Sort by distance if enabled
+  let sortedFeatures = [...window.rcGeoData];
+  if (STATE.sortNearest && STATE.userLat !== null) {
+    sortedFeatures.sort((a, b) => (a.properties._dist || 999) - (b.properties._dist || 999));
+  }
+
+  // Rebuild clusters
+  markerCluster.clearLayers();
+
+  sortedFeatures.forEach(f => {
+    const props = f.properties;
+    const [lng, lat] = f.geometry.coordinates;
+    const cpId = props.cp_id;
+
+    // District filter
+    if (STATE.district !== 'all' && props.district !== STATE.district) return;
+
+    // Legend type filter
+    if (!STATE.legendFilter.has(props.legend)) return;
+
+    // Waste type filter
+    const accepted = props.waste_types || [];
+    const hasWantedWaste = accepted.some(w => STATE.wasteFilter.has(w.trim()));
+    if (STATE.wasteFilter.size < WASTE_TYPES.length && !hasWantedWaste) return;
+
+    // Text search filter
+    if (STATE.searchQuery) {
+      const q = STATE.searchQuery.toLowerCase();
+      const name = (props.name_tc || '').toLowerCase();
+      const addr = (props.address_tc || '').toLowerCase();
+      if (!name.includes(q) && !addr.includes(q)) return;
+    }
+
+    const marker = L.marker([lat, lng], { icon: createMarkerIcon(props.legend) });
+    marker.bindPopup('載入中…');
+    marker.on('click', () => {
+      marker.getPopup().setContent(buildPopupContent(props)).openPopup();
+    });
+    markerCluster.addLayer(marker);
+    window.rcMarkers[cpId] = marker;
+    visibleCount++;
+
+    // Count waste types
+    accepted.forEach(w => {
+      const id = w.trim();
+      if (WASTE_MAP[id]) wasteCounts[id]++;
+    });
+    if (props.legend) venueTypes.add(props.legend);
+  });
+
+  // Update waste pill counts
+  WASTE_TYPES.forEach(w => {
+    const el = document.getElementById('wc-' + w.id);
+    if (el) el.textContent = wasteCounts[w.id].toLocaleString();
+  });
+
+  // Update stats bar
   document.getElementById('stats-count').textContent = visibleCount.toLocaleString();
+  document.getElementById('stats-wastes').textContent = Object.values(wasteCounts).filter(v => v > 0).length;
+  document.getElementById('stats-venues').textContent = venueTypes.size;
 }
+
+// ── Search ────────────────────────────────────────────────────────────────────
+document.getElementById('search-input').addEventListener('input', (e) => {
+  STATE.searchQuery = e.target.value.trim();
+  applyFilters();
+});
+
+// ── GPS / Geolocation ─────────────────────────────────────────────────────────
+const gpsBtn = document.getElementById('gps-btn');
+const gpsStatus = document.getElementById('gps-status');
+const sortNearestBtn = document.getElementById('sort-nearest-btn');
+
+gpsBtn.addEventListener('click', () => {
+  if (!navigator.geolocation) {
+    alert('你的瀏覽器不支援定位功能');
+    return;
+  }
+  gpsStatus.classList.add('show');
+  gpsStatus.textContent = '定位中…';
+  gpsBtn.classList.add('active');
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      STATE.userLat = pos.coords.latitude;
+      STATE.userLng = pos.coords.longitude;
+      gpsStatus.textContent = '✅ 已定位';
+      gpsBtn.classList.add('active');
+      map.setView([STATE.userLat, STATE.userLng], 15);
+
+      // Auto-enable nearest sort
+      STATE.sortNearest = true;
+      sortNearestBtn.classList.add('active');
+      applyFilters();
+
+      setTimeout(() => gpsStatus.classList.remove('show'), 3000);
+    },
+    (err) => {
+      gpsStatus.textContent = '❌ 定位失敗';
+      gpsBtn.classList.remove('active');
+      setTimeout(() => gpsStatus.classList.remove('show'), 3000);
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+});
+
+sortNearestBtn.addEventListener('click', () => {
+  if (STATE.userLat === null) {
+    alert('請先點擊「定位」按鈕取得你的位置');
+    return;
+  }
+  STATE.sortNearest = !STATE.sortNearest;
+  sortNearestBtn.classList.toggle('active', STATE.sortNearest);
+  applyFilters();
+});
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   const resp = await fetch('recycling_data.json');
   const geojson = await resp.json();
   window.rcData = geojson;
-
-  // Store markers keyed by cp_id
+  window.rcGeoData = geojson.features;
   window.rcMarkers = {};
 
-  geojson.features.forEach(f => {
-    const props = f.properties;
-    const [lng, lat] = f.geometry.coordinates;
-    const marker = L.marker([lat, lng], {
-      icon: createMarkerIcon(props.legend)
-    });
-    marker.bindPopup('載入中…');
-    marker.on('click', () => {
-      marker.getPopup().setContent(buildPopupContent(props)).openPopup();
-    });
-    marker.addTo(map);
-    window.rcMarkers[props.cp_id] = marker;
-  });
-
   buildWasteFilter();
+  buildLegend();
   buildDistrictFilter(geojson.features);
   applyFilters();
 

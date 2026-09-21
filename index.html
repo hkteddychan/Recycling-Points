@@ -205,6 +205,22 @@
     #map { height: calc(100vh - 140px); }
   }
 </style>
+
+  <meta name="theme-color" content="#2e7d32">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="stylesheet" href="assets/hkmap.css">
+  <style>
+[data-theme="dark"] #search-bar, [data-theme="dark"] #filter-bar { background: var(--hk-surface-2); border-color: var(--hk-border); }
+[data-theme="dark"] #header, [data-theme="dark"] #stats-bar { background: #14532d; }
+[data-theme="dark"] .waste-pill { background: var(--hk-surface-2); color: var(--hk-text-2); border-color: var(--hk-border); }
+[data-theme="dark"] .waste-pill:not(.active) .waste-count { background: var(--hk-surface); color: var(--hk-text-2); }
+[data-theme="dark"] .popup-name, [data-theme="dark"] .popup-address, [data-theme="dark"] .popup-hours, [data-theme="dark"] .popup-contact, [data-theme="dark"] .popup-district { color: var(--hk-text-2); }
+[data-theme="dark"] .popup-hours { background: var(--hk-surface-2); }
+
+</style>
+  <script src="assets/hkmap.js"></script>
 </head>
 <body>
 
@@ -639,7 +655,13 @@ sortNearestBtn.addEventListener('click', () => {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
-  const resp = await fetch('recycling_data.json');
+  let resp;
+  try {
+    resp = await fetch('recycling_data.json');
+  } catch (e) {
+    if (window.HKMap) HKMap.showError('⚠️ 回收點數據載入失敗', init);
+    return;
+  }
   const geojson = await resp.json();
   window.rcData = geojson;
   window.rcGeoData = geojson.features;
@@ -655,6 +677,11 @@ async function init() {
 }
 
 init();
+</script>
+
+<script>
+  window.HKMap && window.HKMap.registerSW && window.HKMap.registerSW('sw.js');
+  window.HKMap && window.HKMap.mountThemeButton && window.HKMap.mountThemeButton(document.getElementById('map'));
 </script>
 </body>
 </html>

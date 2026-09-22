@@ -36,3 +36,5 @@ jobs:
           commit_message: 'chore: daily update recycling points data'
           file_pattern: recycling_data.json
           skip_dirty: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -3,7 +3,7 @@ name: Update Recycling Points Data
 on:
   schedule:
     # Daily at 08:00 HKT (00:30 UTC) — data source updates infrequently but keeps fresh
-    - cron: '30 0 * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:

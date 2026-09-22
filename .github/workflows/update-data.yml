@@ -2,7 +2,6 @@ name: Update Recycling Points Data
 
 on:
   schedule:
-    # Daily at 08:00 HKT (00:30 UTC) — data source updates infrequently but keeps fresh
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
@@ -20,7 +19,8 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          ref: main
+          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -30,11 +30,15 @@ jobs:
       - name: Fetch latest recycling points data
         run: python fetch_recycling.py
 
-      - name: Commit if changed
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: 'chore: daily update recycling points data'
-          file_pattern: recycling_data.json
-          skip_dirty: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit and push if changed
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add recycling_data.json
+            git commit -m "chore: auto-update recycling points data"
+            git push origin main
+            echo "Pushed data update"
+          else
+            echo "No data change"
+          fi
